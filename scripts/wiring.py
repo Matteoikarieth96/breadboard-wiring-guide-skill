@@ -319,9 +319,18 @@ class SpecError(Exception):
 
 # ---------------------------------------------------------------- helpers
 
-_LINKY = re.compile(r"(?i)[a-z][a-z0-9+.-]*://|\bwww\.|\S@|@\S|\b[a-z0-9-]+\.(?:com|net|org|io|it|eu|dev|app|co|cc|xyz|zip|info|me|ly|gg|ai|uk|de|fr|es|ru|cn|us|tv|link|site|online|top)\b")
-_USB_TALK = re.compile(r"(?i)usb|plug|cable|cavo|cavetto usb|stacca|attacca|scollega|disconnect")
-_PUNCT = set(" .,:;!?'\"()/+-%&<>=*#_[]~0123456789")
+_LINKY = re.compile(r"(?i)[a-z][a-z0-9+.-]*://|\bwww\.|@|\b(?:javascript|data|mailto|file|vbscript|ftp|https?|tel|sms):"
+                    r"|[a-z0-9-]\.[a-z]{2,}\b")
+_USB_TALK = ("usb", "plug")
+_PUNCT = set(" .,:;!?'\"()/+-%&<>=*#_[]~0123456789\u00b0\u03a9\u03bc\u20ac$")
+_TYPO = {"\u2018": "'", "\u2019": "'", "\u201c": '"', "\u201d": '"', "\u2013": "-", "\u2014": "-",
+         "\u00b5": "\u03bc", "\u2126": "\u03a9"}
+
+
+def _skeleton(text):
+    """Lowercase ASCII letters only: accents and look-alike marks dropped, spaces and dots gone."""
+    base = unicodedata.normalize("NFKD", text)
+    return "".join(c for c in base.lower() if "a" <= c <= "z")
 
 
 def _allowed_char(c):
@@ -348,18 +357,19 @@ def clean_text(value, field, max_len, free=True):
         raise SpecError("%s must be text" % field)
     if any(_bad_char(c) for c in value):
         raise SpecError("%s contains control or invisible characters" % field)
+    if free:
+        value = unicodedata.normalize("NFKC", "".join(_TYPO.get(c, c) for c in value))
     value = value.strip()
     if not value:
         raise SpecError("%s is empty" % field)
     if len(value) > max_len:
         raise SpecError("%s is longer than %d characters" % (field, max_len))
     if free:
-        value = unicodedata.normalize("NFKC", value)
+        if _LINKY.search(value):
+            raise SpecError("%s cannot contain links, domains or e-mail addresses" % field)
         if not all(_allowed_char(c) for c in value):
             raise SpecError("%s may use only Latin letters, digits and basic punctuation" % field)
-        if _LINKY.search(value):
-            raise SpecError("%s cannot contain links or e-mail addresses" % field)
-        if _USB_TALK.search(value):
+        if any(word in _skeleton(value) for word in _USB_TALK):
             raise SpecError("%s cannot talk about USB or plugging in: the script writes the USB call of every step itself" % field)
     return value
 
@@ -1582,10 +1592,11 @@ def render_guide(project, lay, steps, wires, image_ext):
         out += ["", md(T["existing"].format(what=", ".join(names)))]
     out += ["", "## %s" % T["notes_head"], ""] + ["- %s" % n for n in notes_for(project)]
     for i, s in enumerate(steps):
-        out += ["", "## %s: %s" % (T["step"].format(n=i + 1, total=len(steps)), md(s["title"])), "",
+        out += ["", "## %s" % T["step"].format(n=i + 1, total=len(steps)), "",
                 usb_mark[s["unplug"]], ""]
         if not s["unplug"]:
             out += [T["stay_extra"], ""]
+        out += ["*%s*" % md(s["title"]), ""]
         lines, checks = step_lines(project, lay, s)
         out += ["%d. %s" % (j + 1, md(l)) for j, l in enumerate(lines)]
         if s["note"]:
@@ -1626,7 +1637,7 @@ def compute(project):
     return lay, wires, steps, height
 
 
-OUR_IMAGE = re.compile(r"(?:step-[0-9]{2}|overview)\.(?:svg|png)", re.IGNORECASE)
+OUR_IMAGE = re.compile(r"(?:step-[0-9]{2}|overview)\.(?:svg|png)", re.IGNORECASE | re.ASCII)
 OUR_TEXT = {"guide.md", "plan.json"}
 
 
@@ -1661,8 +1672,8 @@ def prepare_out(out, targets=()):
         if not stat.S_ISREG(st.st_mode) or st.st_nlink > 1:
             raise SpecError("refusing to write: %s is not a plain file" % e)
     for e in ours:
-        if OUR_IMAGE.fullmatch(e.name):
-            os.unlink(e)  # old images of an earlier build
+        if OUR_IMAGE.fullmatch(e.name) or e.name.casefold() == "guide.md":
+            os.unlink(e)  # old images and guide of an earlier build: never mix old and new
     return out
 
 

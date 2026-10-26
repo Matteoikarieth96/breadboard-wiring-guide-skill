@@ -30,7 +30,7 @@ What the skill reads, runs and writes, and what could be hostile:
 | Risk | Mitigation | File |
 | --- | --- | --- |
 | Markup or script injected through titles and labels | All text is XML-escaped in SVG; Markdown escapes HTML characters, brackets, pipes, backticks, `*`, `_`, `#`, `~`; notes sit behind a fixed "Note:" prefix | `scripts/wiring.py` (`xml`, `md`) |
-| Spec text imitating the USB line or carrying links | Free text is NFKC-normalised and limited to Latin letters, digits and basic punctuation (no look-alike letters from other alphabets); words about USB, cables or plugging in, links, domains and e-mail addresses are refused | `scripts/wiring.py` (`clean_text`) |
+| Spec text imitating the USB line or carrying links | Free text is NFKC-normalised and limited to Latin letters, digits and basic punctuation (no letters from other alphabets); anything whose letter skeleton spells USB or plug, links, schemes, domains and e-mail addresses are refused; in guide.md the USB line sits right under each step heading, before the user's title | `scripts/wiring.py` (`clean_text`, `_skeleton`, `render_guide`) |
 | Invisible, direction-changing or non-XML characters | Rejected at validation (control, format, private-use, unassigned, variation selectors) | `scripts/wiring.py` (`clean_text`) |
 | Terminal escape codes in error lines | Untrusted values are printed with `ascii()`, cut to 40 characters | `scripts/wiring.py` (`show`) |
 | Huge, odd or malformed spec | Regular files only (no FIFOs or devices), 256 KB limit, NaN and deep nesting refused, strict keys and types, at most 12 parts and 20 steps | `scripts/wiring.py` (`load_spec`, `validate`) |
@@ -60,7 +60,8 @@ Tests for these cases: `tests/test_wiring.py` (`TestValidation`,
   same folder at the same moment is not defended against.
 - The script cannot know which sketch runs on the board. It relies on the
   user following the empty-sketch rule.
-- The word filter cannot catch every way of saying "leave it plugged in".
+- The word filter cannot catch every way of saying "leave it connected"
+  (for example "keep the board connected to the PC").
   The USB banner is drawn larger than any user text, and SKILL.md tells
   Claude to take the call only from the script's own field.
 - Chrome may leave helper processes or files in its temporary profile if it

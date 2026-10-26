@@ -75,8 +75,8 @@ Write `spec.json` in the chosen folder. Format:
 [references/spec-format.md](references/spec-format.md).
 `python3 "<skill>/scripts/wiring.py" parts` lists the parts, their signals
 and the boards. Examples: [examples/](examples/). Titles, labels and notes
-are short plain text in Latin letters: no links, nothing about USB, cables
-or plugging in (the script refuses them).
+are short plain text in Latin letters: no links, domains or e-mail
+addresses, and no words about USB or plugging in (the script refuses them).
 
 To let the user test signal wires with USB plugged in, split a module into
 two steps: the part step (places it and its power wires) and a later step
@@ -102,7 +102,9 @@ python3 "<skill>/scripts/wiring.py" build "<folder>/spec.json" --out "<folder>/o
 With `--png` this takes a few seconds per image: give the command a long
 timeout (10 minutes). It writes `overview`, one `step-NN` image per step,
 `guide.md` and `plan.json`. Without Chrome or Chromium, or if Chrome fails,
-it says so in a `note:` line and the guide uses the SVG files. Set
+it says so in a `note:` line and the guide uses the SVG files. If the build
+stops with an error, or `plan.json` says `"complete": false`, use nothing from
+that folder: fix the cause and build again. Set
 `CHROME_PATH` only to a path the user typed. Open every image yourself (Read
 the PNG) before showing it: wires distinct, labels readable, the new part
 highlighted. If a drawing is confusing, change the order of the parts or the

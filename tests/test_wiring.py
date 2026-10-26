@@ -497,23 +497,33 @@ class TestReviewFixes(TempDir):
                       steps=[{"parts": ["b"], "note": "USB può restare attaccato"}]), "cannot talk about USB")
 
     def test_text_cannot_carry_links(self):
-        for bad in ("see https://x.example/a", "go to www.x.example", "firmware at evil-site.com/fw", "see evil.io"):
+        for bad in ("see https://x.example/a", "go to www.x.example", "firmware at evil-site.com/fw", "see evil.io",
+                    "evil.ws", "goo.gl/abc", "javascript:alert(1)", "data:text/html,x", "mailto:me"):
             with self.subTest(bad=bad):
                 self.bad(spec(title=bad), "links")
         for bad in ("mail a@b.example", "me\uff20evil.com", "x@evil.c"):
             with self.subTest(bad=bad):
-                with self.assertRaises(W.SpecError):
-                    compute(spec(title=bad))
+                self.bad(spec(title=bad), "links")
         compute(spec(title="Night light, e.g. for a desk (v1.2)"))  # ordinary dots still fine
 
     def test_look_alike_letters_and_synonyms(self):
-        for bad in ("U\u0405B can stay plu\u0261ged in", "\uff35\uff33\uff22 stays", "the cable can stay",
-                    "Non serve staccare il cavo", "\u0423\u0421\u0411"):
+        for bad in ("U\u0405B can stay plu\u0261ged in", "\uff35\uff33\uff22 stays", "\u01d3SB can stay",
+                    "U.S.B. can stay", "U S B ok", "\U0001f124\U0001f122\U0001f111", "\u0423\u0421\u0411",
+                    "keep it pl\u00fcgged"):
             with self.subTest(bad=bad):
                 with self.assertRaises(W.SpecError):
                     compute(spec(title=bad))
         project = W.validate(spec(title="Caff\u00e8 timer, citt\u00e0 e perch\u00e9"))
         self.assertEqual(project["title"], "Caff\u00e8 timer, citt\u00e0 e perch\u00e9")
+        for ok in ("Il LED attaccato al pin 9", "Sensore dell\u2019ingresso", "Resistenza da 220 \u2126",
+                   "Stacca il filo blu", "Disconnect the red wire", "Jumper cable rosso", "3.3V e.g. v1.2"):
+            with self.subTest(ok=ok):
+                W.validate(spec(title=ok))
+        self.assertEqual(W.validate(spec(title="dell\u2019ingresso"))["title"], "dell'ingresso")
+
+    def test_length_checked_after_normalising(self):
+        with self.assertRaises(W.SpecError):
+            compute(spec(title="\u2487" * 80))  # 80 characters that expand to 320
 
     def test_bridge_counts_for_the_usb_call(self):
         _, _, _, steps = compute(spec(
@@ -631,7 +641,32 @@ class TestReviewFixes(TempDir):
             self.assertTrue((out / "step-01.svg").exists())  # nothing deleted before the refusal
             self.assertEqual(victim.read_text(encoding="utf-8"), "safe")
 
+    def test_interrupted_rebuild_leaves_no_old_guide(self):
+        W.build(ROOT / "examples" / "add-a-joystick.json", self.tmp / "o")
+        old = W.render_svg
+
+        def boom(*a, **k):
+            raise OSError("killed")
+        W.render_svg = boom
+        try:
+            with self.assertRaises(OSError):
+                W.build(ROOT / "examples" / "night-light.json", self.tmp / "o")
+        finally:
+            W.render_svg = old
+        self.assertFalse((self.tmp / "o" / "guide.md").exists())
+        plan = json.loads((self.tmp / "o" / "plan.json").read_text(encoding="utf-8"))
+        self.assertFalse(plan["complete"])
+
+    def test_usb_line_comes_before_the_user_title(self):
+        W.build(self.write_spec(spec(parts=[{"id": "b", "type": "button"}],
+                                     steps=[{"parts": ["b"], "title": "Place the start button"}])), self.tmp / "o")
+        guide = (self.tmp / "o" / "guide.md").read_text(encoding="utf-8")
+        sec = guide.split("## Step 2 of 2", 1)[1]
+        self.assertLess(sec.index("Unplug USB first."), sec.index("Place the start button"))
+
     def test_odd_names_are_not_ours(self):
+        self.assertIsNone(W.OUR_IMAGE.fullmatch("\u017ftep-01.svg"))
+        self.assertIsNone(W.OUR_IMAGE.fullmatch("overv\u0131ew.svg"))
         self.assertIsNone(W.OUR_IMAGE.fullmatch("step-01.svg\n"))
         self.assertIsNone(W.OUR_IMAGE.fullmatch("step-٠٧.png"))
         self.assertIsNotNone(W.OUR_IMAGE.fullmatch("overview.png"))

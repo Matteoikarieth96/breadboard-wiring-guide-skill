@@ -66,10 +66,12 @@ on-board LED sits on it). Automatic pins never use D0, D1 or D13, start at
 D2 and A0, and give LEDs a PWM pin (3, 5, 6, 9, 10, 11) when one is free.
 
 Text rules: titles, labels, notes and `lcd_text` are plain text: Latin
-letters (accents included), digits and basic punctuation. Links, domains,
+letters (accents included), digits, basic punctuation, and the signs °, Ω,
+µ, € and $; typographic quotes and dashes become plain ones. Links, domains,
 e-mail addresses, other alphabets, control or invisible characters, and
-words about USB, cables or plugging in are refused: the USB call is the
-script's job.
+anything that spells USB or plug (also with dots, spaces or look-alike
+letters) are refused: the USB call is the script's job. In `guide.md` the
+USB line comes right under each step heading, before your step title.
 
 ## Steps
 
@@ -100,7 +102,9 @@ that joins the top and bottom - rails when a button needs GND at the bottom).
 earlier build of this skill (its `plan.json` says `"generator":
 "breadboard-wiring-guide"`). It checks every file it would touch first, never
 writes through symlinks or hard links (each file is written to a temp file
-and renamed), and only removes its own old `step-NN` and `overview` images.
+and renamed), and only removes its own old `step-NN` and `overview` images
+and old `guide.md`. It writes `plan.json` with `"complete": false` first and
+the full plan last, so a build cut short is easy to spot.
 
 - `overview.svg`, `step-01.svg` ... (and `.png` with `--png`)
 - `guide.md`: safety notes, what you need (jumper wires by type, resistors
