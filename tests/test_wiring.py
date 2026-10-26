@@ -528,7 +528,7 @@ class TestReviewFixes(TempDir):
             with self.subTest(ok=ok):
                 W.validate(spec(title=ok))
         for bad in ("\u01b2SB can stay", "US\u0181 ok", "us\u0180 ok", "pIugged in", "U$B ok", "\u03bcSB ok",
-                    "p1ug it", "p\u0142ug", "Visit 192.168.1.1/fw", "magnet:?xt=urn", "evil.to/fw"):
+                    "p1ug it", "p\u0142ug", "Visit 198.51.100.7/fw", "magnet:?xt=urn", "evil.to/fw"):
             with self.subTest(bad=bad):
                 with self.assertRaises(W.SpecError):
                     W.validate(spec(title=bad))
