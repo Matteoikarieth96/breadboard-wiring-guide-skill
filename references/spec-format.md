@@ -30,7 +30,7 @@ One JSON object. Unknown keys are an error, so typos show up at once.
 | `board` | no | `uno-r3`, `uno-r4-minima` or `uno-r4-wifi` (default). Sets the pin current limit: 20 mA on R3, 8 mA on R4. |
 | `language` | no | `en` (default) or `it`. Fixed text only; your titles, labels and notes are used as written. `--lang` on the command line overrides it. |
 | `parts` | yes | 1 to 12 parts, see below. |
-| `existing` | no | Part ids already wired and working, plus `"rails"` if 5V and GND already feed the rails. No steps for them; their wires are drawn grey. |
+| `existing` | no | Part ids already wired and working, plus `"rails"` if 5V and GND already feed the rails. No steps for them; their wires are drawn grey. Each existing part must give its pins and, on the breadboard, its `column`, as wired on the bench. |
 | `steps` | no | Leave it out for one step per part (after a first step for the rails). |
 | `lcd_text` | no | Two lines of up to 16 characters shown on the drawn LCD. |
 
@@ -65,9 +65,11 @@ the UNO R3 (they are its USB serial line); an input on D13 gets a note (the
 on-board LED sits on it). Automatic pins never use D0, D1 or D13, start at
 D2 and A0, and give LEDs a PWM pin (3, 5, 6, 9, 10, 11) when one is free.
 
-Text rules: titles, labels, notes and `lcd_text` are plain text. Links,
-e-mail addresses, control or invisible characters, and anything about USB or
-plugging in are refused: the USB call is the script's job.
+Text rules: titles, labels, notes and `lcd_text` are plain text: Latin
+letters (accents included), digits and basic punctuation. Links, domains,
+e-mail addresses, other alphabets, control or invisible characters, and
+words about USB, cables or plugging in are refused: the USB call is the
+script's job.
 
 ## Steps
 

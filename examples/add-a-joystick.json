@@ -4,7 +4,7 @@
   "language": "en",
   "existing": ["rails", "start", "screen"],
   "parts": [
-    {"id": "start", "type": "button", "label": "Start", "pin": "D2"},
+    {"id": "start", "type": "button", "label": "Start", "pin": "D2", "column": 3},
     {"id": "screen", "type": "lcd1602-i2c"},
     {"id": "stick", "type": "joystick", "pins": {"VRX": "A0", "VRY": "A1", "SW": "D6"}}
   ],

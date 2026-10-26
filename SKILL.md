@@ -59,7 +59,8 @@ said.
    bigger and safe on both. Any other board: stop and say it is not covered.
 2. **Parts**: what they want to connect, and what is already wired and
    working on the breadboard (those go in `existing`: no steps, their wires
-   drawn grey).
+   drawn grey). For each existing part ask its pins and, on the breadboard,
+   its first column: the script refuses to guess them.
 3. **Pins**: let the script pick (recommended), or specific pins, for
    example to match a sketch they already have.
 4. **Output**: language of the guide (English or Italian built in), PNG
@@ -74,7 +75,8 @@ Write `spec.json` in the chosen folder. Format:
 [references/spec-format.md](references/spec-format.md).
 `python3 "<skill>/scripts/wiring.py" parts` lists the parts, their signals
 and the boards. Examples: [examples/](examples/). Titles, labels and notes
-are short plain text: no links, nothing about USB (the script refuses both).
+are short plain text in Latin letters: no links, nothing about USB, cables
+or plugging in (the script refuses them).
 
 To let the user test signal wires with USB plugged in, split a module into
 two steps: the part step (places it and its power wires) and a later step

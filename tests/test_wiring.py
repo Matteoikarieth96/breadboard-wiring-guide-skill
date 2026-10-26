@@ -120,11 +120,15 @@ class TestValidation(unittest.TestCase):
         self.bad(spec(parts=parts, steps=[{"wires": ["j.SW"]}, {"parts": ["j"]}]),
                  "before its part is placed")
         self.bad(spec(parts=parts, steps=[{"title": "empty"}]), "no parts and no wires")
-        self.bad(spec(parts=parts, existing=["j"], steps=[{"parts": ["j"]}]), "listed as existing")
+        wired = [{"id": "j", "type": "joystick", "pins": {"VRX": "A0", "VRY": "A1", "SW": "D6"}}]
+        self.bad(spec(parts=wired, existing=["j"], steps=[{"parts": ["j"]}]), "listed as existing")
 
     def test_existing(self):
         self.bad(spec(existing=["ghost"]), "unknown part")
-        self.bad(spec(existing=["rails", "btn"]), "nothing to wire")
+        self.bad(spec(existing=["rails", "btn"],
+                      parts=[{"id": "btn", "type": "button", "pin": "D2", "column": 3}]), "nothing to wire")
+        self.bad(spec(existing=["btn"]), "give its column")
+        self.bad(spec(existing=["btn"], parts=[{"id": "btn", "type": "button", "column": 3}]), "give its pins")
 
     def test_one_i2c_module(self):
         self.bad(spec(parts=[{"id": "a", "type": "lcd1602-i2c"}, {"id": "b", "type": "lcd1602-i2c"}]),
@@ -220,7 +224,7 @@ class TestUsbRule(unittest.TestCase):
     def test_existing_wires_have_no_step(self):
         _, _, wires, steps = compute(spec(
             existing=["rails", "btn"],
-            parts=[{"id": "btn", "type": "button"}, {"id": "l", "type": "led"}]))
+            parts=[{"id": "btn", "type": "button", "pin": "D2", "column": 3}, {"id": "l", "type": "led"}]))
         self.assertEqual(len(steps), 1)
         self.assertTrue(all(w["step"] == -1 for w in wires if w["part"] in ("rails", "btn")))
 
@@ -493,9 +497,91 @@ class TestReviewFixes(TempDir):
                       steps=[{"parts": ["b"], "note": "USB può restare attaccato"}]), "cannot talk about USB")
 
     def test_text_cannot_carry_links(self):
-        for bad in ("see https://x.example/a", "go to www.x.example", "mail a@b.example"):
+        for bad in ("see https://x.example/a", "go to www.x.example", "firmware at evil-site.com/fw", "see evil.io"):
             with self.subTest(bad=bad):
                 self.bad(spec(title=bad), "links")
+        for bad in ("mail a@b.example", "me\uff20evil.com", "x@evil.c"):
+            with self.subTest(bad=bad):
+                with self.assertRaises(W.SpecError):
+                    compute(spec(title=bad))
+        compute(spec(title="Night light, e.g. for a desk (v1.2)"))  # ordinary dots still fine
+
+    def test_look_alike_letters_and_synonyms(self):
+        for bad in ("U\u0405B can stay plu\u0261ged in", "\uff35\uff33\uff22 stays", "the cable can stay",
+                    "Non serve staccare il cavo", "\u0423\u0421\u0411"):
+            with self.subTest(bad=bad):
+                with self.assertRaises(W.SpecError):
+                    compute(spec(title=bad))
+        project = W.validate(spec(title="Caff\u00e8 timer, citt\u00e0 e perch\u00e9"))
+        self.assertEqual(project["title"], "Caff\u00e8 timer, citt\u00e0 e perch\u00e9")
+
+    def test_bridge_counts_for_the_usb_call(self):
+        _, _, _, steps = compute(spec(
+            parts=[{"id": "first", "type": "button"}, {"id": "second", "type": "button"}],
+            steps=[{"parts": ["second"]}, {"wires": ["second.SIG"]}, {"parts": ["first"]}]))
+        self.assertTrue(steps[2]["unplug"])  # the bottom - rail is not grounded yet
+
+    def test_odd_board_and_language_types(self):
+        for data in (spec(board=[]), spec(board={}), spec(language=[]), spec(language={})):
+            with self.subTest(data=data):
+                with self.assertRaises(W.SpecError):
+                    compute(data)
+
+    def test_png_must_be_complete(self):
+        self.assertFalse(W.png_ok(b"\x89PNG\r\n\x1a\nGARBAGE"))
+
+    @unittest.skipIf(os.name == "nt", "shell stub")
+    def test_broken_png_and_failing_chrome_fall_back(self):
+        for body in ("printf '\\211PNG\\r\\n\\032\\nGARBAGE' > \"$out\"; exit 0", "exit 1"):
+            stub = self.tmp / "chromium-stub"
+            stub.write_text("#!/bin/sh\nfor a in \"$@\"; do case \"$a\" in --screenshot=*) out=\"${a#--screenshot=}\";; esac; done\n" + body + "\n", encoding="utf-8")
+            stub.chmod(0o755)
+            old = W.find_chrome
+            W.find_chrome = lambda: str(stub)
+            try:
+                out = self.tmp / ("o-" + str(len(body)))
+                _, _, files, warnings = W.build(self.write_spec(spec()), out, png=True)
+            finally:
+                W.find_chrome = old
+            self.assertTrue(warnings)
+            self.assertFalse(list(out.glob("*.png")))
+
+    def test_marker_is_written_before_the_images(self):
+        old = W.render_svg
+        calls = []
+
+        def boom(*a, **k):
+            calls.append(1)
+            raise OSError("disk full")
+        W.render_svg = boom
+        try:
+            with self.assertRaises(OSError):
+                W.build(self.write_spec(spec()), self.tmp / "o")
+        finally:
+            W.render_svg = old
+        W.build(self.write_spec(spec()), self.tmp / "o")  # the half-built folder is accepted
+        self.assertTrue((self.tmp / "o" / "guide.md").is_file())
+
+    @unittest.skipIf(os.name == "nt", "symlinks")
+    def test_case_variant_link_refused_before_deleting(self):
+        W.build(self.write_spec(spec()), self.tmp / "o")
+        out = self.tmp / "o"
+        victim = self.tmp / "victim.txt"
+        victim.write_text("safe", encoding="utf-8")
+        (out / "guide.md").unlink()
+        os.symlink(victim, out / "Guide.md")
+        with self.assertRaises(W.SpecError):
+            W.build(self.write_spec(spec()), out)
+        self.assertTrue((out / "step-01.svg").exists())
+        self.assertEqual(victim.read_text(encoding="utf-8"), "safe")
+
+    def test_output_errors_are_error_lines(self):
+        spec_path = self.write_spec(spec())
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = W.main(["build", str(spec_path), "--out", str(spec_path / "out")])
+        self.assertEqual(code, 2)
+        self.assertIn("error:", err.getvalue())
 
     def test_noncharacters_rejected(self):
         self.bad(spec(title="bench \uffff"), "invisible")

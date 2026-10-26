@@ -19,6 +19,7 @@ import heapq
 import json
 import os
 import re
+import shutil
 import stat
 import subprocess
 import sys
@@ -318,8 +319,16 @@ class SpecError(Exception):
 
 # ---------------------------------------------------------------- helpers
 
-_LINKY = re.compile(r"(?i)[a-z][a-z0-9+.-]*://|\bwww\.|[^\s@]+@[^\s@]+\.[a-z]{2,}")
-_USB_TALK = re.compile(r"(?i)usb|plug|staccat|attaccat")
+_LINKY = re.compile(r"(?i)[a-z][a-z0-9+.-]*://|\bwww\.|\S@|@\S|\b[a-z0-9-]+\.(?:com|net|org|io|it|eu|dev|app|co|cc|xyz|zip|info|me|ly|gg|ai|uk|de|fr|es|ru|cn|us|tv|link|site|online|top)\b")
+_USB_TALK = re.compile(r"(?i)usb|plug|cable|cavo|cavetto usb|stacca|attacca|scollega|disconnect")
+_PUNCT = set(" .,:;!?'\"()/+-%&<>=*#_[]~0123456789")
+
+
+def _allowed_char(c):
+    """Latin letters (accents included), digits and basic punctuation only."""
+    if c in _PUNCT or ("a" <= c <= "z") or ("A" <= c <= "Z"):
+        return True
+    return 0xC0 <= ord(c) <= 0x24F and c not in "\u00d7\u00f7" and unicodedata.category(c).startswith("L")
 
 
 def _bad_char(c):
@@ -345,6 +354,9 @@ def clean_text(value, field, max_len, free=True):
     if len(value) > max_len:
         raise SpecError("%s is longer than %d characters" % (field, max_len))
     if free:
+        value = unicodedata.normalize("NFKC", value)
+        if not all(_allowed_char(c) for c in value):
+            raise SpecError("%s may use only Latin letters, digits and basic punctuation" % field)
         if _LINKY.search(value):
             raise SpecError("%s cannot contain links or e-mail addresses" % field)
         if _USB_TALK.search(value):
@@ -465,10 +477,10 @@ def validate(data):
         raise SpecError("unknown spec keys: %s" % ", ".join(show(k) for k in sorted(unknown)[:5]))
     title = clean_text(data.get("title", ""), "title", 80)
     board = data.get("board", "uno-r4-wifi")
-    if board not in BOARDS:
+    if not isinstance(board, str) or board not in BOARDS:
         raise SpecError("board must be one of: %s" % ", ".join(BOARDS))
     lang = data.get("language", "en")
-    if lang not in STR:
+    if not isinstance(lang, str) or lang not in STR:
         raise SpecError("language must be one of: %s" % ", ".join(STR))
     lcd_text = data.get("lcd_text", ["Hello,", "breadboard!"])
     if not isinstance(lcd_text, list) or len(lcd_text) != 2:
@@ -579,6 +591,17 @@ def validate(data):
         if e != "rails" and e not in ids:
             raise SpecError("existing: unknown part %s" % show(e))
     existing = set(existing)
+    by_id = {p["id"]: p for p in parts}
+    for e in sorted(existing - {"rails"}):
+        p, raw = by_id[e], parts_in[by_id[e]["index"]]
+        info = PARTS[p["type"]]
+        free_sigs = [s for s, k in info["signals"].items() if k not in ("sda", "scl")]
+        given = raw.get("pins", {}) if isinstance(raw.get("pins"), dict) else {}
+        has_pins = "pin" in raw or all(any(str(k).upper() == s for k in given) for s in free_sigs)
+        if free_sigs and not has_pins:
+            raise SpecError("existing part %s: give its pins as they are wired on the bench" % e)
+        if info["kind"] in ("bb", "mixed") and p["column"] is None:
+            raise SpecError("existing part %s: give its column as it sits on the breadboard" % e)
 
     steps = data.get("steps")
     if steps is not None:
@@ -1067,7 +1090,10 @@ def build_steps(project, wires):
             # signal wires only: still unplug unless the rails and every touched part are already powered
             needed = [wire_ids[x] for x in ("rails.5V", "rails.GND")]
             for w in new_wires:
-                needed += [pw for pw in by_part.get(w["part"], []) if not wire_signal_only(pw)]
+                own = by_part.get(w["part"], [])
+                needed += [pw for pw in own if not wire_signal_only(pw)]
+                if "rails.bridge" in wire_ids and any(e[0] == "rail" and e[1] == "bottom" for pw in own for e in (pw["a"], pw["b"])):
+                    needed.append(wire_ids["rails.bridge"])
             unplug = any(pw["step"] >= i for pw in needed)
         if s["title"]:
             title = s["title"]
@@ -1575,7 +1601,7 @@ def render_guide(project, lay, steps, wires, image_ext):
 def plan_json(project, steps, wires):
     T = STR[project["lang"]]
     return {
-        "generator": GENERATOR, "version": 1,
+        "generator": GENERATOR, "version": 1, "complete": True,
         "title": project["title"], "board": project["board"], "language": project["lang"],
         "parts": [{"id": p["id"], "type": p["type"], "label": p["label"], "pins": p["pins"],
                    "column": p.get("col"), "resistor_ohm": p.get("resistor")} for p in project["parts"]],
@@ -1600,7 +1626,7 @@ def compute(project):
     return lay, wires, steps, height
 
 
-OUR_IMAGE = re.compile(r"(?:step-[0-9]{2}|overview)\.(?:svg|png)")
+OUR_IMAGE = re.compile(r"(?:step-[0-9]{2}|overview)\.(?:svg|png)", re.IGNORECASE)
 OUR_TEXT = {"guide.md", "plan.json"}
 
 
@@ -1615,7 +1641,8 @@ def _is_our_plan(path):
     return isinstance(data, dict) and data.get("generator") == GENERATOR
 
 
-def prepare_out(out):
+def prepare_out(out, targets=()):
+    """targets: the file names this build will write, checked before anything is touched."""
     out = Path(out)
     if out.is_symlink():
         raise SpecError("output folder %s is a symlink: pick a real folder" % out)
@@ -1625,9 +1652,12 @@ def prepare_out(out):
     entries = list(out.iterdir())
     if entries and not _is_our_plan(out / "plan.json"):
         raise SpecError("output folder %s is not empty and holds no earlier build of this skill: pick an empty folder" % out)
-    ours = [e for e in entries if e.name in OUR_TEXT or OUR_IMAGE.fullmatch(e.name)]
-    for e in ours:  # check everything before touching anything
-        st = os.lstat(e)
+    ours = [e for e in entries if e.name.casefold() in OUR_TEXT or OUR_IMAGE.fullmatch(e.name)]
+    for e in ours + [out / t for t in targets]:  # check everything before touching anything
+        try:
+            st = os.lstat(e)
+        except FileNotFoundError:
+            continue
         if not stat.S_ISREG(st.st_mode) or st.st_nlink > 1:
             raise SpecError("refusing to write: %s is not a plain file" % e)
     for e in ours:
@@ -1717,19 +1747,30 @@ def chrome_cmd(chrome, svg_path, png_path, w, h, profile):
             "--force-device-scale-factor=2", "--screenshot=%s" % png_path, Path(svg_path).resolve().as_uri()]
 
 
+def png_ok(data):
+    """A complete PNG: signature, IHDR first, IEND last."""
+    return (len(data) > 45 and data[:8] == b"\x89PNG\r\n\x1a\n" and data[12:16] == b"IHDR"
+            and data[-12:] == b"\x00\x00\x00\x00IEND\xaeB`\x82")
+
+
 def render_png(chrome, svg_path, w, h):
     """PNG bytes, or None. Chrome writes only inside its own temp folder."""
-    with tempfile.TemporaryDirectory(prefix="wiring-chrome-") as tmp:
+    tmp = tempfile.mkdtemp(prefix="wiring-chrome-")
+    try:
         shot = os.path.join(tmp, "shot.png")
         cmd = chrome_cmd(chrome, svg_path, shot, w, h, os.path.join(tmp, "profile"))
         try:
-            subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                           timeout=PNG_TIMEOUT, check=False)
+            done = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                  timeout=PNG_TIMEOUT, check=False)
+            if done.returncode != 0:
+                return None
             with open(shot, "rb") as f:
                 data = f.read()
         except (subprocess.TimeoutExpired, OSError):
             return None
-    return data if data.startswith(b"\x89PNG\r\n\x1a\n") else None
+        return data if png_ok(data) else None
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 def build(spec_path, out, png=False, lang=None):
@@ -1739,9 +1780,12 @@ def build(spec_path, out, png=False, lang=None):
             raise SpecError("language must be one of: %s" % ", ".join(STR))
         project["lang"] = lang
     lay, wires, steps, height = compute(project)
-    out = prepare_out(out)
-    warnings = []
     jobs = [("overview", None)] + [("step-%02d" % (i + 1), i) for i in range(len(steps))]
+    targets = [name + ext for name, _ in jobs for ext in (".svg", ".png")] + sorted(OUR_TEXT)
+    out = prepare_out(out, targets)
+    # the marker first: a build cut short still leaves a folder the next build accepts
+    safe_write(out / "plan.json", json.dumps({"generator": GENERATOR, "version": 1, "complete": False}) + "\n")
+    warnings = []
     files, sizes = [], {}
     for name, k in jobs:
         text, W, H = render_svg(project, lay, height, wires, steps, k)
@@ -1841,6 +1885,9 @@ def main(argv=None):
             print("%d steps; USB: %s" % (len(steps), ", ".join("unplug" if s["unplug"] else "may stay" for s in steps)))
     except SpecError as exc:
         print("error: %s" % exc, file=sys.stderr)
+        return 2
+    except OSError as exc:
+        print("error: cannot read or write a file: %s" % (exc.strerror or "error"), file=sys.stderr)
         return 2
     return 0
 
