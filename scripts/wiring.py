@@ -319,36 +319,45 @@ class SpecError(Exception):
 
 # ---------------------------------------------------------------- helpers
 
-_LINKY = re.compile(r"(?i)[a-z][a-z0-9+.-]*://|\bwww\.|@|\b(?:javascript|data|mailto|file|vbscript|ftp|https?|tel|sms|ssh|magnet|intent):"
-                    r"|\b[a-z0-9-]{2,}\.(?:[a-z]{2}|com|net|org|info|biz|page|store|site|online|app|dev|xyz|top|link|shop|club|live|tech|zip|mov)\b(?!\()"
+_SCHEMES = r"(?:javascript|data|mailto|file|vbscript|ftp|https?|tel|sms|ssh|magnet|intent)"
+_TLDS = (r"(?:[a-z]{2}|com|net|org|info|biz|page|store|site|online|app|dev|xyz|top|link|shop|club|live|tech|zip|mov"
+         r"|gov|edu|wiki|lol|click|icu|cloud|museum|mobi|name|pro|blog|news|space|world)")
+_LINKY = re.compile(r"(?i)[a-z][a-z0-9+.-]*://|\bwww\.|@|\b" + _SCHEMES + r":(?=\S)"
+                    r"|(?<![a-z0-9-])[a-z0-9-]{2,}\." + _TLDS + r"(?![a-z])"
+                    r"|(?<![a-z0-9-])[a-z0-9]\.(?:com|net|org|co|me|ly|io|gg|to)(?![a-z])"
                     r"|\b[0-9]{1,3}(?:\.[0-9]{1,3}){3}\b")
 _USB_TALK = ("usb", "plug")
 _EXTRA_LETTERS = set("\u00c6\u00e6\u0152\u0153\u00d8\u00f8\u00df")
-_PUNCT = set(" .,:;!?'\"()/+-%&<>=*#_[]~0123456789\u00b0\u03a9\u03bc\u20ac$")
+_PUNCT = set(" .,:;!?'\"()/+-%&<>=*#_[]~0123456789\u00b0\u03a9\u03bc\u20ac$\u00b1\u00d7\u2192\u00ab\u00bb")
 _TYPO = {"\u2018": "'", "\u2019": "'", "\u201c": '"', "\u201d": '"', "\u2013": "-", "\u2014": "-",
          "\u00b5": "\u03bc", "\u2126": "\u03a9"}
 
 
-def _skeletons(text):
-    """Words as plain lowercase ASCII, with runs of single letters joined (U S B, U.S.B.).
+_STAND_INS = str.maketrans({"I": "l", "|": "l", "1": "l", "$": "s", "5": "s", "8": "b", "9": "g",
+                            "\u00df": "b", "\u03bc": "u"})
 
-    Two readings: as written, and with the usual stand-ins folded (I | 1 for l, $ 5 for s, mu for u)."""
-    out = []
-    for folded in (text, text.translate(str.maketrans({"I": "l", "|": "l", "1": "l", "$": "s", "5": "s", "\u03bc": "u"}))):
-        base = "".join(c for c in unicodedata.normalize("NFKD", folded).lower() if c.isascii())
+
+def _spells(text, word):
+    """True when `word` is spelled inside one word, or across words starting or ending on a word edge.
+
+    "plugged", "U S B", "pl ug", "Unpl ug" spell it; "Plus button" and "blu sbagliato" do not."""
+    for reading in (text, text.translate(_STAND_INS)):
+        base = "".join(c for c in unicodedata.normalize("NFKD", reading).lower() if c.isascii())
         words = re.findall(r"[a-z]+", base)
-        runs, cur = [], ""
+        joined, starts, ends, pos = "", set(), set(), 0
         for w in words:
-            if len(w) == 1:
-                cur += w
-            else:
-                if cur:
-                    runs.append(cur)
-                cur = ""
-        if cur:
-            runs.append(cur)
-        out += words + runs
-    return out
+            starts.add(pos)
+            pos += len(w)
+            ends.add(pos)
+            joined += w
+        i = joined.find(word)
+        while i >= 0:
+            j = i + len(word)
+            inside_one = any(st <= i and j <= en for st, en in zip(sorted(starts), sorted(ends)))
+            if inside_one or i in starts or j in ends:
+                return True
+            i = joined.find(word, i + 1)
+    return False
 
 
 def _allowed_char(c):
@@ -389,7 +398,7 @@ def clean_text(value, field, max_len, free=True):
             raise SpecError("%s cannot contain links, domains or e-mail addresses" % field)
         if not all(_allowed_char(c) for c in value):
             raise SpecError("%s may use only Latin letters, digits and basic punctuation" % field)
-        if any(word in token for token in _skeletons(value) for word in _USB_TALK):
+        if any(_spells(value, word) for word in _USB_TALK):
             raise SpecError("%s cannot talk about USB or plugging in: the script writes the USB call of every step itself" % field)
     return value
 
@@ -1692,6 +1701,9 @@ def prepare_out(out, targets=()):
             continue
         if not stat.S_ISREG(st.st_mode) or st.st_nlink > 1:
             raise SpecError("refusing to write: %s is not a plain file" % e)
+    for e in entries:  # temp files left by a build that was killed
+        if re.fullmatch(r"\.wiring-[A-Za-z0-9_]+\.tmp", e.name, re.ASCII) and not e.is_symlink() and e.is_file():
+            os.unlink(e)
     for e in ours:
         if OUR_IMAGE_EXACT.fullmatch(e.name) or e.name == "guide.md":
             os.unlink(e)  # old images and guide of an earlier build (exact names only): never mix old and new

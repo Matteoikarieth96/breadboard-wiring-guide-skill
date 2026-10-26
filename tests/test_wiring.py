@@ -524,14 +524,28 @@ class TestReviewFixes(TempDir):
     def test_filter_reads_word_by_word(self):
         for ok in ("Plus button", "Minus button", "Status buzzer", "I2C bus board", "Bus bar",
                    "Il filo blu sbagliato", "Workshop luglio", "Carica lo sketch Blink.ino",
-                   "Serial.begin(9600)", "V.le Marconi", "R4 WiFi"):
+                   "Serial.begin(9600)", "V.le Marconi", "R4 WiFi", "Data: D2", "File: Blink.ino",
+                   "LCD 16\u00d72", "\u00b15%", "D2 \u2192 LED", "\u00abStart\u00bb", "Sensore pi\u00f9 sbiadito",
+                   "Dott.ssa Bianchi", "p.es. il pin 3", "10 \u00b5F"):
             with self.subTest(ok=ok):
                 W.validate(spec(title=ok))
         for bad in ("\u01b2SB can stay", "US\u0181 ok", "us\u0180 ok", "pIugged in", "U$B ok", "\u03bcSB ok",
-                    "p1ug it", "p\u0142ug", "Visit 198.51.100.7/fw", "magnet:?xt=urn", "evil.to/fw"):
+                    "p1ug it", "p\u0142ug", "Visit 198.51.100.7/fw", "magnet:?xt=urn", "evil.to/fw",
+                    "US B can stay in", "U SB", "U-SB", "US/B", "US.B", "pl ug it in", "p lug", "plu g", "Pl-ug",
+                    "p.lug", "p'lug", "Unpl ug", "U\u2009SB", "US8", "US\u00df", "plu9", "x.com/fw", "t.co/abc",
+                    "t.me/joinme", "evil.gov", "evil.edu", "evil.lol", "evil.click", "evil.icu", "evil.wiki",
+                    "evil.cloud", "evil.museum", "\u00e9vil.com", "m\u00fcnchen.de", "evil.com(now)"):
             with self.subTest(bad=bad):
                 with self.assertRaises(W.SpecError):
                     W.validate(spec(title=bad))
+
+    def test_killed_build_temp_files_are_cleaned(self):
+        W.build(self.write_spec(spec()), self.tmp / "o")
+        (self.tmp / "o" / ".wiring-abc123.tmp").write_text("x", encoding="utf-8")
+        (self.tmp / "o" / ".wiring-notes.txt").write_text("mine", encoding="utf-8")
+        W.build(self.write_spec(spec()), self.tmp / "o")
+        self.assertFalse((self.tmp / "o" / ".wiring-abc123.tmp").exists())
+        self.assertTrue((self.tmp / "o" / ".wiring-notes.txt").exists())
 
     def test_dollar_is_escaped(self):
         self.assertIn("\\$x\\$", W.md("$x$"))
