@@ -498,8 +498,8 @@ class TestReviewFixes(TempDir):
                 self.bad(spec(title=bad), "links")
 
     def test_noncharacters_rejected(self):
-        self.bad(spec(title="bench ￿"), "invisible")
-        self.bad(spec(title="bench ￾"), "invisible")
+        self.bad(spec(title="bench \uffff"), "invisible")
+        self.bad(spec(title="bench \ufffe"), "invisible")
 
     def test_markdown_escaping(self):
         out = W.md("## *x* _y_ ~z~ #1 > q")
