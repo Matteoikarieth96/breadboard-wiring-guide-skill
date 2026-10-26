@@ -1,13 +1,14 @@
-# arduino-breadboard-guide
+# breadboard-wiring-guide
 
-A Claude Code skill that walks a beginner through wiring an Arduino UNO
-breadboard, one step at a time, with a generated diagram for every step and
+A Claude Code skill that walks a beginner through wiring a breadboard for an
+Arduino UNO, one step at a time, with a generated diagram for every step and
 a clear call on each one: unplug USB first, or USB can stay plugged in.
 
 ![A step drawn by the skill for a fictional mini arcade controller](docs/hero.png)
 
 > **Independent project.** Not affiliated with or endorsed by Arduino.
-> Board and module names are used only to say what the skill works with.
+> Arduino and UNO are trademarks of their owner; board and module names are
+> used only to say what the skill works with.
 
 ## What it does
 
@@ -17,7 +18,8 @@ a clear call on each one: unplug USB first, or USB can stay plugged in.
   breadboard, routes every jumper without overlaps, picks resistor values for
   the board's pin current limit and decides the USB call of every step.
 - Hands over one image per step (new wires in colour, earlier ones grey, the
-  new part highlighted), an overview, a Markdown guide and a `plan.json`.
+  new part highlighted), an overview, a Markdown guide (with the jumper wires
+  and resistors you need, 4-band and 5-band colour codes) and a `plan.json`.
 - Walks you through the steps in chat, one at a time, each opening with the
   USB line. It can compare a photo of your bench with the plan.
 
@@ -39,22 +41,27 @@ ask.
 ## The USB rule
 
 Power wires (5V, GND, the + and - rails, module VCC and GND) and whole
-modules: unplug USB first. Signal wires only (D pins, A pins, SDA, SCL): USB
-can stay plugged in. The script makes this call for every step; a spec can
-make a step stricter, never looser.
+modules: unplug USB first. Signal wires only (D pins, A pins, SDA, SCL), on
+parts that are already powered: USB can stay plugged in. The script makes
+this call for every step; a spec can make a step stricter, never looser.
+
+Two habits the guide asks for before the first wire: power the board only
+from USB (nothing in the DC jack or on VIN), and upload an empty sketch
+(BareMinimum) so that no old sketch drives a pin you are wiring.
 
 ## Install
 
 ```bash
-git clone https://github.com/Matteoikarieth96/arduino-breadboard-guide-skill ~/.claude/skills/arduino-breadboard-guide
+git clone https://github.com/Matteoikarieth96/breadboard-wiring-guide-skill ~/.claude/skills/breadboard-wiring-guide
 ```
 
 Requirements:
 
 - Python 3.9 or newer (standard library only)
+- macOS or Linux (tested in CI). Windows is untested.
 - Optional, for PNG images: Google Chrome or Chromium. Without it you get
   SVG files, which any browser opens. `CHROME_PATH` can point at another
-  install.
+  install (an absolute path). PNGs take a few seconds per image.
 
 ## Usage
 
@@ -63,12 +70,13 @@ In Claude Code, just ask:
 > I have an UNO R4 WiFi, a button, an LCD with I2C and a joystick. How do I
 > wire them?
 
-You can also run the script yourself:
+You can also run the script yourself, from the skill folder:
 
 ```bash
+cd ~/.claude/skills/breadboard-wiring-guide
 python3 scripts/wiring.py parts
 python3 scripts/wiring.py check examples/night-light.json
-python3 scripts/wiring.py build examples/night-light.json --out out/night-light --png
+python3 scripts/wiring.py build examples/night-light.json --out /tmp/night-light --png
 ```
 
 The spec format is in [references/spec-format.md](references/spec-format.md).
@@ -77,14 +85,16 @@ All examples are fictional projects.
 ## Security
 
 The script reads one JSON file, writes only into the output folder you give
-it (never through symlinks), escapes every piece of text it draws, makes no
-network calls and runs nothing except, with `--png`, a headless Chrome or
-Chromium on the SVG files it just wrote. Details and residual risks:
-[SECURITY.md](SECURITY.md).
+it (never through symlinks or hard links), refuses links and USB talk in the
+text it draws, escapes everything else, makes no network calls and runs
+nothing except, with `--png`, a headless Chrome or Chromium on the SVG files
+it just wrote. Details and residual risks: [SECURITY.md](SECURITY.md).
 
 ## Limitations
 
 - One breadboard layout: half size, 30 columns, parts placed from the left.
+  Rail holes on real breadboards have no column numbers: any hole along the
+  rail works.
 - One I2C module per guide.
 - Module pin orders follow common boards; yours may differ. The labels
   printed on your module always win.

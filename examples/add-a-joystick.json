@@ -11,6 +11,6 @@
   "steps": [
     {"title": "Place the joystick and power it", "parts": ["stick"]},
     {"title": "Connect the joystick signals", "wires": ["stick.VRX", "stick.VRY", "stick.SW"],
-     "note": "Only signal wires here, so USB can stay plugged in while you test each one."}
+     "note": "Only signal wires here: test each one as you connect it."}
   ]
 }

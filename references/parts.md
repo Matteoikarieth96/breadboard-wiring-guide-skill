@@ -10,6 +10,8 @@ vary between makers: always read what is printed on the part.
 - Sketch: `pinMode(pin, INPUT_PULLUP)`. Released reads `HIGH`, pressed reads
   `LOW`. No external resistor needed.
 - A press can bounce for a few milliseconds: ignore changes for about 20 ms.
+- Avoid D13 for inputs: the on-board LED on that pin can keep INPUT_PULLUP
+  from reading HIGH.
 
 ## LED
 
@@ -22,6 +24,8 @@ vary between makers: always read what is printed on the part.
 
 ## Passive buzzer
 
+- The layout puts its legs 3 holes apart (7.6 mm), the usual spacing of 12 mm
+  buzzers. Measure yours: if the spacing differs, say so before wiring.
 - Sketch: `tone(pin, 1000)` for a 1 kHz note, `noTone(pin)` to stop.
 - Through the resistor it is quiet but safe for the pin.
 - Active buzzers (they beep on plain DC) usually need more current than an
@@ -30,6 +34,8 @@ vary between makers: always read what is printed on the part.
 ## Potentiometer
 
 - Outer legs to + and -, middle leg (wiper) to an analog pin.
+- Most breadboard potentiometers fit three holes in a row. One with wider
+  legs needs a different layout: say so before wiring.
 - Sketch: `analogRead(pin)` gives 0 to 1023 from one end to the other.
   Turning it the "wrong" way just swaps the ends.
 
