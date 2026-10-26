@@ -319,25 +319,45 @@ class SpecError(Exception):
 
 # ---------------------------------------------------------------- helpers
 
-_LINKY = re.compile(r"(?i)[a-z][a-z0-9+.-]*://|\bwww\.|@|\b(?:javascript|data|mailto|file|vbscript|ftp|https?|tel|sms):"
-                    r"|[a-z0-9-]\.[a-z]{2,}\b")
+_LINKY = re.compile(r"(?i)[a-z][a-z0-9+.-]*://|\bwww\.|@|\b(?:javascript|data|mailto|file|vbscript|ftp|https?|tel|sms|ssh|magnet|intent):"
+                    r"|\b[a-z0-9-]{2,}\.(?:[a-z]{2}|com|net|org|info|biz|page|store|site|online|app|dev|xyz|top|link|shop|club|live|tech|zip|mov)\b(?!\()"
+                    r"|\b[0-9]{1,3}(?:\.[0-9]{1,3}){3}\b")
 _USB_TALK = ("usb", "plug")
+_EXTRA_LETTERS = set("\u00c6\u00e6\u0152\u0153\u00d8\u00f8\u00df")
 _PUNCT = set(" .,:;!?'\"()/+-%&<>=*#_[]~0123456789\u00b0\u03a9\u03bc\u20ac$")
 _TYPO = {"\u2018": "'", "\u2019": "'", "\u201c": '"', "\u201d": '"', "\u2013": "-", "\u2014": "-",
          "\u00b5": "\u03bc", "\u2126": "\u03a9"}
 
 
-def _skeleton(text):
-    """Lowercase ASCII letters only: accents and look-alike marks dropped, spaces and dots gone."""
-    base = unicodedata.normalize("NFKD", text)
-    return "".join(c for c in base.lower() if "a" <= c <= "z")
+def _skeletons(text):
+    """Words as plain lowercase ASCII, with runs of single letters joined (U S B, U.S.B.).
+
+    Two readings: as written, and with the usual stand-ins folded (I | 1 for l, $ 5 for s, mu for u)."""
+    out = []
+    for folded in (text, text.translate(str.maketrans({"I": "l", "|": "l", "1": "l", "$": "s", "5": "s", "\u03bc": "u"}))):
+        base = "".join(c for c in unicodedata.normalize("NFKD", folded).lower() if c.isascii())
+        words = re.findall(r"[a-z]+", base)
+        runs, cur = [], ""
+        for w in words:
+            if len(w) == 1:
+                cur += w
+            else:
+                if cur:
+                    runs.append(cur)
+                cur = ""
+        if cur:
+            runs.append(cur)
+        out += words + runs
+    return out
 
 
 def _allowed_char(c):
-    """Latin letters (accents included), digits and basic punctuation only."""
-    if c in _PUNCT or ("a" <= c <= "z") or ("A" <= c <= "Z"):
+    """ASCII letters, accented letters built on them, a few more Latin letters, digits and basic punctuation."""
+    if c in _PUNCT or ("a" <= c <= "z") or ("A" <= c <= "Z") or c in _EXTRA_LETTERS:
         return True
-    return 0xC0 <= ord(c) <= 0x24F and c not in "\u00d7\u00f7" and unicodedata.category(c).startswith("L")
+    base = unicodedata.normalize("NFKD", c)
+    return (0xC0 <= ord(c) <= 0x24F and len(base) > 1 and ("a" <= base[0].lower() <= "z")
+            and all(unicodedata.category(m) == "Mn" for m in base[1:]))
 
 
 def _bad_char(c):
@@ -369,7 +389,7 @@ def clean_text(value, field, max_len, free=True):
             raise SpecError("%s cannot contain links, domains or e-mail addresses" % field)
         if not all(_allowed_char(c) for c in value):
             raise SpecError("%s may use only Latin letters, digits and basic punctuation" % field)
-        if any(word in _skeleton(value) for word in _USB_TALK):
+        if any(word in token for token in _skeletons(value) for word in _USB_TALK):
             raise SpecError("%s cannot talk about USB or plugging in: the script writes the USB call of every step itself" % field)
     return value
 
@@ -384,7 +404,7 @@ def md(text):
     out = str(text).replace("\\", "\\\\")
     for a, b in (("&", "&amp;"), ("<", "&lt;"), (">", "&gt;")):
         out = out.replace(a, b)
-    for ch in "[]|`*_#~":
+    for ch in "[]|`*_#~$":
         out = out.replace(ch, "\\" + ch)
     return out
 
@@ -1638,6 +1658,7 @@ def compute(project):
 
 
 OUR_IMAGE = re.compile(r"(?:step-[0-9]{2}|overview)\.(?:svg|png)", re.IGNORECASE | re.ASCII)
+OUR_IMAGE_EXACT = re.compile(r"(?:step-[0-9]{2}|overview)\.(?:svg|png)", re.ASCII)
 OUR_TEXT = {"guide.md", "plan.json"}
 
 
@@ -1672,8 +1693,8 @@ def prepare_out(out, targets=()):
         if not stat.S_ISREG(st.st_mode) or st.st_nlink > 1:
             raise SpecError("refusing to write: %s is not a plain file" % e)
     for e in ours:
-        if OUR_IMAGE.fullmatch(e.name) or e.name.casefold() == "guide.md":
-            os.unlink(e)  # old images and guide of an earlier build: never mix old and new
+        if OUR_IMAGE_EXACT.fullmatch(e.name) or e.name == "guide.md":
+            os.unlink(e)  # old images and guide of an earlier build (exact names only): never mix old and new
     return out
 
 

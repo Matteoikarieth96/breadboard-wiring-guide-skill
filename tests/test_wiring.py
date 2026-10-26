@@ -521,6 +521,21 @@ class TestReviewFixes(TempDir):
                 W.validate(spec(title=ok))
         self.assertEqual(W.validate(spec(title="dell\u2019ingresso"))["title"], "dell'ingresso")
 
+    def test_filter_reads_word_by_word(self):
+        for ok in ("Plus button", "Minus button", "Status buzzer", "I2C bus board", "Bus bar",
+                   "Il filo blu sbagliato", "Workshop luglio", "Carica lo sketch Blink.ino",
+                   "Serial.begin(9600)", "V.le Marconi", "R4 WiFi"):
+            with self.subTest(ok=ok):
+                W.validate(spec(title=ok))
+        for bad in ("\u01b2SB can stay", "US\u0181 ok", "us\u0180 ok", "pIugged in", "U$B ok", "\u03bcSB ok",
+                    "p1ug it", "p\u0142ug", "Visit 192.168.1.1/fw", "magnet:?xt=urn", "evil.to/fw"):
+            with self.subTest(bad=bad):
+                with self.assertRaises(W.SpecError):
+                    W.validate(spec(title=bad))
+
+    def test_dollar_is_escaped(self):
+        self.assertIn("\\$x\\$", W.md("$x$"))
+
     def test_length_checked_after_normalising(self):
         with self.assertRaises(W.SpecError):
             compute(spec(title="\u2487" * 80))  # 80 characters that expand to 320

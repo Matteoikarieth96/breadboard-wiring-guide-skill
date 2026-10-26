@@ -69,8 +69,10 @@ Text rules: titles, labels, notes and `lcd_text` are plain text: Latin
 letters (accents included), digits, basic punctuation, and the signs °, Ω,
 µ, € and $; typographic quotes and dashes become plain ones. Links, domains,
 e-mail addresses, other alphabets, control or invisible characters, and
-anything that spells USB or plug (also with dots, spaces or look-alike
-letters) are refused: the USB call is the script's job. In `guide.md` the
+anything that spells USB or plug (also with dots, spaces, accents or common
+stand-ins such as $ for S) are refused: the USB call is the script's job.
+Plain words that say the same thing ("keep the board connected") cannot be
+caught; the script's own USB line always comes first. In `guide.md` the
 USB line comes right under each step heading, before your step title.
 
 ## Steps
