@@ -1478,7 +1478,7 @@ def find_chrome():
 
 
 def chrome_cmd(chrome, svg_path, png_path, w, h, profile):
-    return [chrome, "--headless=new", "--disable-gpu", "--hide-scrollbars", "--no-first-run",
+    return [chrome, "--headless=new", "--use-mock-keychain", "--password-store=basic", "--disable-gpu", "--hide-scrollbars", "--no-first-run",
             "--no-default-browser-check", "--disable-extensions", "--user-data-dir=%s" % profile,
             "--window-size=%d,%d" % (w, h), "--force-device-scale-factor=2",
             "--screenshot=%s" % png_path, Path(svg_path).resolve().as_uri()]
