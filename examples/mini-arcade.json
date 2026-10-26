@@ -1,0 +1,14 @@
+{
+  "title": "Mini arcade controller",
+  "board": "uno-r4-wifi",
+  "language": "en",
+  "lcd_text": ["PRESS START", "score 0000"],
+  "parts": [
+    {"id": "start", "type": "button", "label": "Start", "pin": "D2"},
+    {"id": "screen", "type": "lcd1602-i2c"},
+    {"id": "stick", "type": "joystick", "pins": {"VRX": "A0", "VRY": "A1", "SW": "D6"}},
+    {"id": "sonar", "type": "hc-sr04", "pins": {"TRIG": "D7", "ECHO": "D8"}},
+    {"id": "motion", "type": "pir", "pins": {"OUT": "A3"}},
+    {"id": "beeper", "type": "speaker", "pin": "D9"}
+  ]
+}

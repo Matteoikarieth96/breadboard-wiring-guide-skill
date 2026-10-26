@@ -1,0 +1,10 @@
+{
+  "title": "Night light with a dimmer",
+  "board": "uno-r3",
+  "language": "en",
+  "parts": [
+    {"id": "lamp", "type": "led", "color": "yellow", "pin": "D9", "label": "Lamp"},
+    {"id": "dimmer", "type": "potentiometer", "pin": "A0", "label": "Dimmer"},
+    {"id": "toggle", "type": "button", "pin": "D2", "label": "On/off"}
+  ]
+}

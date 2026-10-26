@@ -1,0 +1,16 @@
+{
+  "title": "Add a joystick to a working bench",
+  "board": "uno-r4-wifi",
+  "language": "en",
+  "existing": ["rails", "start", "screen"],
+  "parts": [
+    {"id": "start", "type": "button", "label": "Start", "pin": "D2"},
+    {"id": "screen", "type": "lcd1602-i2c"},
+    {"id": "stick", "type": "joystick", "pins": {"VRX": "A0", "VRY": "A1", "SW": "D6"}}
+  ],
+  "steps": [
+    {"title": "Place the joystick and power it", "parts": ["stick"]},
+    {"title": "Connect the joystick signals", "wires": ["stick.VRX", "stick.VRY", "stick.SW"],
+     "note": "Only signal wires here, so USB can stay plugged in while you test each one."}
+  ]
+}
